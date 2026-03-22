@@ -1,0 +1,12 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: edtech_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - edtech_redis_data:/data
+
+volumes:
+  edtech_redis_data:

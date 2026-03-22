@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-primary: #0057bd;
+  --color-primary-container: #6e9fff;
+  --color-on-primary: #f0f2ff;
+  
+  --color-secondary: #006947;
+  --color-secondary-container: #69f6b8;
+  --color-on-secondary: #c8ffe0;
+  
+  --color-tertiary: #755600;
+  --color-tertiary-container: #fcc025;
+  
+  --color-surface: #f7f5ff;
+  --color-surface-container: #e4e7ff;
+  --color-surface-container-low: #efefff;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-surface: #242c51;
+  --color-on-surface-variant: #515981;
+  
+  --color-error: #b31b25;
+  --color-error-container: #fb5151;
+  
+  --radius-lg: 2rem;
+  --radius-xl: 3rem;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800;900&display=swap');
+
+body {
+  @apply bg-surface text-on-surface font-sans antialiased;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #d6dbff;
+  border-radius: 10px;
+}
