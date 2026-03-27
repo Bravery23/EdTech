@@ -41,13 +41,6 @@ export default function Login({ onLogin }: LoginProps) {
     }
   };
 
-  const roles = [
-    { id: 'student', label: 'Học sinh', icon: User },
-    { id: 'parent', label: 'Phụ huynh', icon: Users },
-    { id: 'teacher', label: 'Giáo viên', icon: GraduationCap },
-    { id: 'admin', label: 'Admin', icon: ShieldCheck },
-  ];
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden bg-surface">
       {/* Decorative Elements */}
@@ -78,27 +71,6 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
 
           <form className="space-y-6" onSubmit={handleLoginSubmit}>
-            {/* Role Selector */}
-            <div className="space-y-3">
-              <label className="text-xs font-bold uppercase tracking-widest text-on-surface-variant ml-1">Bạn là ai?</label>
-              <div className="grid grid-cols-4 gap-2 p-1.5 bg-surface-container-low rounded-md">
-                {roles.map((role) => (
-                  <button
-                    key={role.id}
-                    type="button"
-                    onClick={() => setSelectedRole(role.id as Role)}
-                    className={`flex flex-col items-center justify-center py-3 px-1 rounded-sm transition-all ${
-                      selectedRole === role.id 
-                        ? 'bg-surface-container-lowest shadow-sm text-primary' 
-                        : 'text-on-surface-variant hover:bg-surface-container-highest/30'
-                    }`}
-                  >
-                    <role.icon className="w-5 h-5 mb-1" />
-                    <span className="text-[10px] font-bold">{role.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Input Fields */}
             <div className="space-y-4">

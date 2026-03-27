@@ -11,6 +11,8 @@ from app.models.user import User
 from app.models.subject import Subject
 from app.services.document_parser import parse_and_chunk_document
 from app.services.vector_db import VectorStoreService
+from app.services.ai_core import AICore
+from sqlalchemy import Integer
 
 router = APIRouter()
 
@@ -29,7 +31,8 @@ class DocumentOut(BaseModel):
 
 @router.post("/documents", status_code=201)
 async def upload_document(
-    subject_id: int = Form(..., description="ID môn học"),
+    class_id: int = Form(..., description="ID lớp học"),
+    subject_id: Optional[int] = Form(None, description="ID môn học"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("subject_teacher", "homeroom_teacher")),
@@ -45,11 +48,14 @@ async def upload_document(
     if ext not in allowed_types:
         raise HTTPException(status_code=400, detail=f"Unsupported file type '{ext}'. Allowed: {allowed_types}")
 
-    subject_obj = db.query(Subject).filter(Subject.id == subject_id).first()
-    if not subject_obj:
-        raise HTTPException(status_code=404, detail="Subject not found")
+    if subject_id:
+        subject_obj = db.query(Subject).filter(Subject.id == subject_id).first()
+        if not subject_obj:
+            raise HTTPException(status_code=404, detail="Subject not found")
+    else:
+        subject_obj = None
         
-    subject_name = subject_obj.name
+    subject_name = subject_obj.name if subject_obj else None
 
     # 1. Save to disk
     file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -57,37 +63,42 @@ async def upload_document(
         shutil.copyfileobj(file.file, f)
 
     try:
-        # 2. Parse + chunk
-        chunks = parse_and_chunk_document(file_path)
-
-        # 3. Embed + store in vector DB
-        vector_service = VectorStoreService(db)
-        texts = [c.page_content for c in chunks]
-        metadatas = [{"subject_id": subject_id, "subject": subject_name, "filename": file.filename, **c.metadata} for c in chunks]
-        vector_service.add_texts(texts, metadatas, teacher_id=current_user.id)
-
+        # 2 & 3. Process with AI_Core
+        ai_core = AICore(db)
+        chunk_count = ai_core.index_document(
+            file_path=file_path, 
+            filename=file.filename, 
+            uploader=current_user, 
+            class_id=class_id, 
+            subject_id=subject_id, 
+            subject_name=subject_name
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"RAG pipeline error: {str(e)}")
     finally:
         os.remove(file_path)  # clean up temp file
 
     return {
-        "message": f"Đã xử lý {len(chunks)} chunks từ file '{file.filename}' cho môn {subject_name}.",
-        "chunks_count": len(chunks),
+        "message": f"Đã xử lý {chunk_count} chunks từ file '{file.filename}'.",
+        "chunks_count": chunk_count,
     }
 
 
 @router.get("/documents", response_model=List[DocumentOut])
 def list_documents(
-    subject: Optional[str] = None,
+    class_id: Optional[int] = None,
+    subject_id: Optional[int] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("subject_teacher", "homeroom_teacher")),
 ):
     query = db.query(Document).filter(Document.teacher_id == current_user.id, Document.deleted_at == None)
-    if subject:
-        # Filter by subject in JSON metadata
-        query = query.filter(Document.metadata_json["subject"].astext == subject)
+    
+    if class_id:
+        query = query.filter(Document.metadata_json["class_id"].astext.cast(Integer) == class_id)
+    if subject_id:
+        query = query.filter(Document.metadata_json["subject_id"].astext.cast(Integer) == subject_id)
+        
     return query.limit(limit).all()
 
 

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     
     # AI models
     DEEPSEEK_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
     
     # JWT
     SECRET_KEY: str = "CHANGE_ME_IN_PRODUCTION_SECRET_KEY"

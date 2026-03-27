@@ -15,7 +15,7 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(384)) # Using pgvector for deepseek/huggingface embeddings
+    embedding = Column(Vector(3072)) # Using pgvector for deepseek/huggingface embeddings
     metadata_json = Column(JSONB, default={}) # e.g. subject, filename, page
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Differentiate different teachers' docs
     

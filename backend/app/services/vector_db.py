@@ -1,22 +1,30 @@
 from sqlalchemy.orm import Session
+import logging
 from app.models.document import Document
 from pgvector.sqlalchemy import Vector
 from app.core.config import settings
 
-# Using HuggingFace sentence-transformers for local, free embeddings
-from langchain_huggingface import HuggingFaceEmbeddings
+# Using Google Gemini embeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+logger = logging.getLogger(__name__)
 
 class VectorStoreService:
     def __init__(self, db: Session):
         self.db = db
-        # Set explicitly to avoid downloading every restart, usually we cache this
-        self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/gemini-embedding-001", 
+            google_api_key=settings.GEMINI_API_KEY
+        )
         
     def add_texts(self, texts: list[str], metadatas: list[dict] = None, teacher_id: int = None):
         if not texts:
+            logger.warning("[VectorDB] Không có đoạn text nào để xử lý.")
             return []
             
+        logger.info(f"[VectorDB] Đang gọi Gemini API (model: models/embedding-001) để chuyển hóa {len(texts)} chunks thành vector...")
         embeddings = self.embeddings.embed_documents(texts)
+        logger.info(f"[VectorDB] Tạo vector thành công. Bắt đầu lưu vào Database...")
         
         docs = []
         for i, text in enumerate(texts):
@@ -30,6 +38,7 @@ class VectorStoreService:
             self.db.add(doc)
             
         self.db.commit()
+        logger.info(f"[VectorDB] Đã lưu thành công {len(docs)} records vào bảng documents.")
         return docs
         
     def similarity_search(self, query: str, subject_filter: str = None, top_k: int = 4, teacher_id: int = None, distance_threshold: float = 0.5):

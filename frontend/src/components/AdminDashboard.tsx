@@ -14,7 +14,7 @@ interface AdminDashboardProps {
   onLogout: () => void;
 }
 
-type AdminTab = 'overview' | 'users' | 'rag-config' | 'system' | 'settings';
+type AdminTab = 'overview' | 'users' | 'classes' | 'rag-config' | 'settings';
 
 const API = 'http://localhost:8000/api/v1';
 
@@ -26,17 +26,51 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [createForm, setCreateForm] = useState({ email: '', full_name: '', password: '', role: 'student' });
   const [isCreating, setIsCreating] = useState(false);
+  
+  // Data for classes tab
+  const [schoolClasses, setSchoolClasses] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [selectedClass, setSelectedClass] = useState<any>(null);
+  const [classStudents, setClassStudents] = useState<any[]>([]);
+  const [classTeachers, setClassTeachers] = useState<any[]>([]);
+  const [showClassModal, setShowClassModal] = useState(false);
+  
+  // Forms for assignment
+  const [assignStudentId, setAssignStudentId] = useState('');
+  const [assignTeacherId, setAssignTeacherId] = useState('');
+  const [assignSubjectId, setAssignSubjectId] = useState('');
+
+  // Create class state
+  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
+  const [createClassForm, setCreateClassForm] = useState({ name: '', grade_level: 10, academic_year: '2023-2024' });
+  const [isCreatingClass, setIsCreatingClass] = useState(false);
 
   const headers = { 'Authorization': `Bearer ${token}` };
 
   useEffect(() => {
     fetchUsers();
+    fetchClasses();
+    fetchSubjects();
   }, [token]);
 
-  const fetchUsers = async () => {
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch(`${API}/users/`, { headers });
+        if (res.ok) setUsers(await res.json());
+      } catch (e) { console.error(e); }
+    };
+
+  const fetchClasses = async () => {
     try {
-      const res = await fetch(`${API}/users/`, { headers });
-      if (res.ok) setUsers(await res.json());
+      const res = await fetch(`${API}/classes/`, { headers });
+      if (res.ok) setSchoolClasses(await res.json());
+    } catch (e) { console.error(e); }
+  };
+  
+  const fetchSubjects = async () => {
+    try {
+      const res = await fetch(`${API}/subjects/`, { headers });
+      if (res.ok) setSubjects(await res.json());
     } catch (e) { console.error(e); }
   };
 
@@ -46,6 +80,77 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const res = await fetch(`${API}/users/${userId}`, { method: 'DELETE', headers });
       if (res.ok || res.status === 204) {
         setUsers(prev => prev.filter(u => u.id !== userId));
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const openClassModal = async (cls: any) => {
+    setSelectedClass(cls);
+    setShowClassModal(true);
+    // Fetch students and teachers
+    try {
+      const resS = await fetch(`${API}/classes/${cls.id}/students`, { headers });
+      if (resS.ok) setClassStudents(await resS.json());
+      
+      const resT = await fetch(`${API}/classes/${cls.id}/teachers`, { headers });
+      if (resT.ok) setClassTeachers(await resT.json());
+    } catch (e) { console.error(e); }
+  };
+
+  const assignHomeroomTeacher = async (teacherId: number) => {
+    try {
+      const res = await fetch(`${API}/classes/${selectedClass.id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ homeroom_teacher_id: teacherId || null })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSelectedClass(updated);
+        setSchoolClasses(prev => prev.map(c => c.id === updated.id ? updated : c));
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const addStudentToClass = async () => {
+    if (!assignStudentId) return;
+    try {
+      const res = await fetch(`${API}/classes/${selectedClass.id}/students/${assignStudentId}`, { method: 'POST', headers });
+      if (res.ok) {
+        setAssignStudentId('');
+        const resS = await fetch(`${API}/classes/${selectedClass.id}/students`, { headers });
+        if (resS.ok) setClassStudents(await resS.json());
+      } else alert("Lỗi khi thêm học sinh");
+    } catch (e) { console.error(e); }
+  };
+
+  const removeStudentFromClass = async (studentId: number) => {
+    try {
+      const res = await fetch(`${API}/classes/${selectedClass.id}/students/${studentId}`, { method: 'DELETE', headers });
+      if (res.ok || res.status === 204) {
+        setClassStudents(prev => prev.filter(cs => cs.student_id !== studentId));
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const addTeacherToClass = async () => {
+    if (!assignTeacherId || !assignSubjectId) return;
+    try {
+      const res = await fetch(`${API}/classes/${selectedClass.id}/teachers/${assignTeacherId}?subject_id=${assignSubjectId}`, { method: 'POST', headers });
+      if (res.ok) {
+        setAssignTeacherId('');
+        setAssignSubjectId('');
+        const resT = await fetch(`${API}/classes/${selectedClass.id}/teachers`, { headers });
+        if (resT.ok) setClassTeachers(await resT.json());
+      } else alert("Lỗi khi phân công giáo viên");
+    } catch (e) { console.error(e); }
+  };
+
+  const removeTeacherFromClass = async (teacherId: number, subjectId: number) => {
+    try {
+      const res = await fetch(`${API}/classes/${selectedClass.id}/teachers/${teacherId}?subject_id=${subjectId}`, { method: 'DELETE', headers });
+      if (res.ok || res.status === 204) {
+        setClassTeachers(prev => prev.filter(ct => !(ct.teacher_id === teacherId && ct.subject_id === subjectId)));
       }
     } catch (e) { console.error(e); }
   };
@@ -76,6 +181,33 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         alert('Lỗi: ' + (err.detail || 'Unknown'));
       }
     } catch (e) { console.error(e); } finally { setIsCreating(false); }
+  };
+
+  const handleCreateClass = async () => {
+    if (!createClassForm.name || !createClassForm.academic_year) {
+      alert('Vui lòng nhập đầy đủ tên lớp và năm học.');
+      return;
+    }
+    setIsCreatingClass(true);
+    try {
+      const res = await fetch(`${API}/classes/`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: createClassForm.name,
+          grade_level: Number(createClassForm.grade_level),
+          academic_year: createClassForm.academic_year
+        })
+      });
+      if (res.ok) {
+        setShowCreateClassModal(false);
+        setCreateClassForm({ name: '', grade_level: 10, academic_year: '2023-2024' });
+        fetchClasses();
+      } else {
+        const err = await res.json();
+        alert('Lỗi: ' + (err.detail || 'Unknown'));
+      }
+    } catch (e) { console.error(e); } finally { setIsCreatingClass(false); }
   };
 
   const stats = [
@@ -137,18 +269,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <span>Người dùng</span>
           </button>
           <button 
+            onClick={() => setActiveTab('classes')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === 'classes' ? 'text-primary font-bold border-r-4 border-primary bg-white/50' : 'text-on-surface-variant hover:text-primary hover:bg-white/30'}`}
+          >
+            <LayoutDashboard className="w-5 h-5" />
+            <span>Lớp học</span>
+          </button>
+          <button 
             onClick={() => setActiveTab('rag-config')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === 'rag-config' ? 'text-primary font-bold border-r-4 border-primary bg-white/50' : 'text-on-surface-variant hover:text-primary hover:bg-white/30'}`}
           >
             <Database className="w-5 h-5" />
             <span>Dữ liệu RAG</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab('system')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === 'system' ? 'text-primary font-bold border-r-4 border-primary bg-white/50' : 'text-on-surface-variant hover:text-primary hover:bg-white/30'}`}
-          >
-            <Cpu className="w-5 h-5" />
-            <span>Hệ thống</span>
           </button>
           <button 
             onClick={() => setActiveTab('settings')}
@@ -187,17 +319,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button className="relative p-2 text-on-surface-variant hover:text-primary transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full border-2 border-white"></span>
-            </button>
             <div className="flex items-center gap-3 pl-4 border-l border-outline-variant/20">
               <div className="text-right">
                 <p className="font-bold text-on-surface text-sm leading-none">{currentUser?.full_name || 'Quản trị viên'}</p>
                 <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mt-1">Hệ thống RAG</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden">
-                <User className="w-5 h-5 text-on-surface-variant" />
               </div>
             </div>
           </div>
@@ -217,15 +342,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
                     <h2 className="text-5xl font-extrabold text-on-surface tracking-tight leading-tight">
-                      Hệ thống<br/><span className="text-primary">Quản trị RAG.</span>
+                      Hệ thống<br/><span className="text-primary">Quản trị.</span>
                     </h2>
                     <p className="text-lg text-on-surface-variant mt-4 max-w-xl leading-relaxed">
                       Giám sát hiệu năng AI, quản lý kho tri thức và điều phối người dùng trong thời gian thực.
                     </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-bold text-primary bg-primary/5 px-4 py-2 rounded-full border border-primary/10">
-                    <Activity className="w-3 h-3 animate-pulse" />
-                    Live: 124 người đang truy cập
                   </div>
                 </div>
 
@@ -387,6 +508,46 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </motion.div>
             )}
 
+            {activeTab === 'classes' && (
+              <motion.div 
+                key="classes"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="space-y-8"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-4xl font-black text-on-surface tracking-tight">Quản lý Lớp học</h2>
+                    <p className="text-on-surface-variant mt-2">Phân bổ học sinh, GVCN và GV bộ môn.</p>
+                  </div>
+                  <button onClick={() => setShowCreateClassModal(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md text-sm font-bold shadow-lg hover:-translate-y-0.5 transition-all">
+                    <Plus className="w-4 h-4" />
+                    <span>Tạo lớp học</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {schoolClasses.map(cls => (
+                    <div key={cls.id} className="glass-panel p-6 rounded-2xl border border-white/40 shadow-sm hover:shadow-md transition-all group flex flex-col justify-between cursor-pointer" onClick={() => openClassModal(cls)}>
+                      <div>
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="text-xl font-bold text-on-surface group-hover:text-primary transition-colors">{cls.name}</h3>
+                          <span className="text-[10px] font-bold px-2 py-1 rounded bg-surface-container-high">{cls.academic_year}</span>
+                        </div>
+                        <p className="text-sm text-on-surface-variant mt-1">Khối {cls.grade_level}</p>
+                        <p className="text-xs text-on-surface-variant mt-3 font-medium">GVCN: <span className="text-on-surface font-bold">{cls.homeroom_teacher_id ? users.find(u => u.id === cls.homeroom_teacher_id)?.full_name || 'Chưa phân công' : 'Chưa phân công'}</span></p>
+                      </div>
+                      <div className="mt-4 pt-4 border-t border-outline-variant/10 flex justify-end">
+                        <span className="text-xs font-bold text-primary group-hover:underline">Quản lý lớp &rarr;</span>
+                      </div>
+                    </div>
+                  ))}
+                  {schoolClasses.length === 0 && <p className="text-on-surface-variant italic py-8">Chưa có lớp học nào trong hệ thống.</p>}
+                </div>
+              </motion.div>
+            )}
+
             {activeTab === 'rag-config' && (
               <motion.div 
                 key="rag"
@@ -478,61 +639,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </motion.div>
             )}
 
-            {activeTab === 'system' && (
-              <motion.div 
-                key="system"
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                className="space-y-8"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-4xl font-black text-on-surface tracking-tight">Trạng thái Hệ thống</h2>
-                    <p className="text-on-surface-variant mt-2">Giám sát tài nguyên máy chủ và dịch vụ AI.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {[
-                    { label: 'CPU Usage', value: '24%', icon: Cpu, color: 'text-primary' },
-                    { label: 'Memory', value: '4.2 / 8 GB', icon: Server, color: 'text-secondary' },
-                    { label: 'API Latency', value: '184ms', icon: Activity, color: 'text-tertiary' },
-                  ].map((item, i) => (
-                    <div key={i} className="glass-panel p-6 rounded-2xl border border-white/40 shadow-sm">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 bg-surface-container rounded-xl">
-                          <item.icon className={`w-6 h-6 ${item.color}`} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">{item.label}</p>
-                          <p className="text-2xl font-black text-on-surface">{item.value}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="glass-panel p-8 rounded-2xl border border-white/40 shadow-sm">
-                  <h3 className="text-lg font-bold text-on-surface mb-6">Nhật ký Hệ thống (Logs)</h3>
-                  <div className="space-y-4 font-mono text-xs">
-                    {[
-                      { time: '14:30:22', level: 'INFO', msg: 'AI Model text-embedding-004 initialized successfully.' },
-                      { time: '14:28:45', level: 'WARN', msg: 'High latency detected in Vector DB query.' },
-                      { time: '14:25:10', level: 'INFO', msg: 'New knowledge source added: SGK_Toan_12.pdf' },
-                      { time: '14:20:05', level: 'INFO', msg: 'User session started: admin@school.edu.vn' },
-                    ].map((log, i) => (
-                      <div key={i} className="flex gap-4 p-2 hover:bg-white/30 rounded transition-colors">
-                        <span className="text-on-surface-variant">{log.time}</span>
-                        <span className={`font-bold ${log.level === 'WARN' ? 'text-tertiary' : 'text-secondary'}`}>[{log.level}]</span>
-                        <span className="text-on-surface">{log.msg}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
             {activeTab === 'settings' && (
               <motion.div 
                 key="settings"
@@ -601,6 +707,102 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         </div>
       </main>
 
+      {/* Class Management Modal */}
+      {showClassModal && selectedClass && (
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low shrink-0">
+              <div>
+                <h3 className="text-2xl font-bold text-on-surface">Lớp {selectedClass.name}</h3>
+                <p className="text-sm text-on-surface-variant mt-1">Năm học {selectedClass.academic_year} • Khối {selectedClass.grade_level}</p>
+              </div>
+              <button onClick={() => setShowClassModal(false)} className="p-2 hover:bg-surface-container rounded-full hover:text-error transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-surface custom-scrollbar">
+              {/* GVCN Section */}
+              <div className="space-y-3">
+                <h4 className="font-bold text-on-surface border-b border-outline-variant/10 pb-2">Giáo viên chủ nhiệm</h4>
+                <div className="flex gap-2 max-w-sm">
+                  <select 
+                    value={selectedClass.homeroom_teacher_id || ''}
+                    onChange={(e) => assignHomeroomTeacher(Number(e.target.value))}
+                    className="flex-1 bg-surface-container-low p-2 rounded-lg text-sm border border-outline-variant/20 focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">-- Chọn GVCN --</option>
+                    {users.filter(u => getRoleLabel(u.role) === 'Giáo viên').map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Subject Teachers Section */}
+              <div className="space-y-4">
+                <h4 className="font-bold text-on-surface border-b border-outline-variant/10 pb-2">Giáo viên Bộ môn</h4>
+                <div className="flex gap-2">
+                  <select value={assignSubjectId} onChange={e => setAssignSubjectId(e.target.value)} className="bg-surface-container-low p-2 rounded-lg text-sm border border-outline-variant/20 flex-1">
+                    <option value="">-- Môn học --</option>
+                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <select value={assignTeacherId} onChange={e => setAssignTeacherId(e.target.value)} className="bg-surface-container-low p-2 rounded-lg text-sm border border-outline-variant/20 flex-1">
+                    <option value="">-- Giáo viên --</option>
+                    {users.filter(u => getRoleLabel(u.role) === 'Giáo viên').map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name}</option>
+                    ))}
+                  </select>
+                  <button onClick={addTeacherToClass} disabled={!assignTeacherId || !assignSubjectId} className="px-4 bg-secondary text-white rounded-lg text-sm font-bold disabled:opacity-50">Phân công</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {classTeachers.map(ct => (
+                    <div key={`${ct.teacher_id}-${ct.subject_id}`} className="p-3 border border-outline-variant/20 rounded-lg flex justify-between items-center bg-white shadow-sm">
+                      <div className="overflow-hidden">
+                        <p className="text-[10px] font-black uppercase text-secondary truncate">{ct.subject?.name}</p>
+                        <p className="text-sm font-bold truncate pr-2">{ct.teacher?.full_name}</p>
+                      </div>
+                      <button onClick={() => removeTeacherFromClass(ct.teacher_id, ct.subject_id)} className="text-error hover:bg-error/10 p-1.5 rounded transition shrink-0">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {classTeachers.length === 0 && <p className="text-xs text-on-surface-variant italic">Chưa phân công môn nào.</p>}
+                </div>
+              </div>
+
+              {/* Students Section */}
+              <div className="space-y-4">
+                <h4 className="font-bold text-on-surface border-b border-outline-variant/10 pb-2">Danh sách Học sinh ({classStudents.length})</h4>
+                <div className="flex gap-2 max-w-md">
+                  <select value={assignStudentId} onChange={e => setAssignStudentId(e.target.value)} className="bg-surface-container-low p-2 rounded-lg text-sm border border-outline-variant/20 flex-1">
+                    <option value="">-- Chọn Học sinh --</option>
+                    {users.filter(u => getRoleLabel(u.role) === 'Học sinh' || u.role.includes('student')).map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
+                    ))}
+                  </select>
+                  <button onClick={addStudentToClass} disabled={!assignStudentId} className="px-4 bg-primary text-white rounded-lg text-sm font-bold disabled:opacity-50">Thêm</button>
+                </div>
+                <div className="bg-white border border-outline-variant/10 rounded-xl overflow-hidden shadow-sm">
+                  {classStudents.map((cs, i) => (
+                    <div key={cs.student_id} className={`flex justify-between items-center p-3 ${i !== classStudents.length - 1 ? 'border-b border-outline-variant/5' : ''}`}>
+                      <div>
+                        <p className="text-sm font-bold">{cs.student?.full_name}</p>
+                        <p className="text-[10px] text-on-surface-variant">{cs.student?.email}</p>
+                      </div>
+                      <button onClick={() => removeStudentFromClass(cs.student_id)} className="text-outline-variant hover:text-error hover:bg-error/10 p-1.5 rounded transition">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {classStudents.length === 0 && <div className="p-4 text-center text-sm text-on-surface-variant italic">Lớp chưa có học sinh.</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create User Modal */}
       {showCreateUser && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -664,6 +866,64 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 className={`px-6 py-2 text-sm font-bold rounded-lg transition-colors ${isCreating ? 'bg-slate-300 text-slate-500' : 'bg-primary text-white hover:bg-primary/90'}`}
               >
                 {isCreating ? 'Đang tạo...' : 'Tạo tài khoản'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Class Modal */}
+      {showCreateClassModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-on-surface">Tạo lớp học mới</h3>
+              <button onClick={() => setShowCreateClassModal(false)} className="p-2 hover:bg-surface-container rounded-full">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-1">Tên lớp</label>
+                <input
+                  type="text"
+                  value={createClassForm.name}
+                  onChange={e => setCreateClassForm({...createClassForm, name: e.target.value})}
+                  className="w-full bg-surface-container-low p-3 rounded-lg text-sm focus:ring-2 focus:ring-primary border-none"
+                  placeholder="Ví dụ: 10A1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-1">Khối</label>
+                <select
+                  value={createClassForm.grade_level}
+                  onChange={e => setCreateClassForm({...createClassForm, grade_level: Number(e.target.value)})}
+                  className="w-full bg-surface-container-low p-3 rounded-lg text-sm focus:ring-2 focus:ring-primary border-none"
+                >
+                  <option value={10}>Khối 10</option>
+                  <option value={11}>Khối 11</option>
+                  <option value={12}>Khối 12</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-1">Năm học</label>
+                <input
+                  type="text"
+                  value={createClassForm.academic_year}
+                  onChange={e => setCreateClassForm({...createClassForm, academic_year: e.target.value})}
+                  className="w-full bg-surface-container-low p-3 rounded-lg text-sm focus:ring-2 focus:ring-primary border-none"
+                  placeholder="Ví dụ: 2023-2024"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <button onClick={() => setShowCreateClassModal(false)} className="px-4 py-2 text-sm font-bold text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors">Hủy</button>
+              <button
+                onClick={handleCreateClass}
+                disabled={isCreatingClass}
+                className={`px-6 py-2 text-sm font-bold rounded-lg transition-colors ${isCreatingClass ? 'bg-slate-300 text-slate-500' : 'bg-primary text-white hover:bg-primary/90'}`}
+              >
+                {isCreatingClass ? 'Đang tạo...' : 'Tạo lớp'}
               </button>
             </div>
           </div>

@@ -5,6 +5,7 @@ import {
   History, Settings, Send, Info, Download, 
   TrendingDown, Activity, GraduationCap, Bot, LogOut
 } from 'lucide-react';
+import NotificationBar from "./Announcement";
 import { useAuth } from '../context/AuthContext';
 
 interface ParentDashboardProps {
@@ -14,6 +15,7 @@ interface ParentDashboardProps {
 interface GradeRow {
   id: number;
   subject_id: number;
+  subject_name?: string;
   exam_type: string;
   score: number;
   semester: number;
@@ -32,6 +34,7 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
   const [chatHistory, setChatHistory] = useState<ChatMsg[]>([
     { role: 'assistant', content: `Xin chào! Tôi là trợ lý ảo tích hợp dữ liệu từ CSDL nhà trường. Tôi có thể giúp Anh/Chị tra cứu **điểm số**, **nhận xét** từ giáo viên hoặc giải đáp thắc mắc về **quy chế học tập** của nhà trường.` }
   ]);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [grades, setGrades] = useState<GradeRow[]>([]);
   const [studentIds, setStudentIds] = useState<number[]>([]);
@@ -145,24 +148,21 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
   return (
     <div className="bg-background text-on-surface min-h-screen flex flex-col overflow-hidden">
       {/* Top Bar */}
-      <header className="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-3 bg-white/70 backdrop-blur-md shadow-sm border-b border-outline-variant/10">
+      <header className="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-3 bg-white/70 backdrop-blur-md shadow-sm border-b border-slate-100">
         <div className="flex items-center gap-4">
           <span className="text-lg font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">RAG Giáo viên ảo</span>
-          <div className="h-6 w-[1px] bg-outline-variant/30 hidden md:block"></div>
+          <div className="h-6 w-[1px] bg-slate-100 hidden md:block"></div>
           <p className="text-xs font-medium text-on-surface-variant hidden md:block uppercase tracking-widest">Portal Phụ huynh</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="relative group">
-            <Bell className="w-5 h-5 text-on-surface-variant cursor-pointer" />
+            <Bell onClick={() => setShowNotifications(!showNotifications)} className="w-5 h-5 text-on-surface-variant cursor-pointer" />
             <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full border-2 border-white"></span>
           </div>
           <div className="flex items-center gap-2 pl-2 border-l border-outline-variant/20">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold leading-tight">{user?.full_name || 'Phụ huynh'}</p>
               <p className="text-[10px] text-on-surface-variant">{user?.email}</p>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center cursor-pointer">
-              <User className="w-5 h-5 text-on-surface-variant" />
             </div>
           </div>
           <button onClick={onLogout} className="flex items-center gap-1 text-sm text-slate-500 hover:text-error font-semibold transition-colors">
@@ -173,6 +173,7 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
 
       <div className="flex h-screen pt-16">
         <main className="flex-1 overflow-hidden grid grid-cols-12 gap-6 p-6">
+          {showNotifications && <NotificationBar onClose={() => setShowNotifications(false)} />}
           {/* Left Column: Reports */}
           <section className="col-span-12 lg:col-span-5 flex flex-col space-y-6 overflow-y-auto pr-2 custom-scrollbar">
             <div>
@@ -217,8 +218,8 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
             </div>
 
             {/* Grades Table */}
-            <div className="bg-surface-container-lowest rounded-lg border border-outline-variant/10 shadow-sm overflow-hidden flex flex-col">
-              <div className="px-5 py-4 border-b border-outline-variant/10 flex justify-between items-center bg-white/50">
+            <div className="bg-surface-container-lowest rounded-lg border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+              <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-white/50">
                 <h3 className="font-bold flex items-center gap-2 text-sm">
                   <GraduationCap className="text-primary w-4 h-4" />
                   Kết quả học tập {grades.length > 0 && `(${grades.length} bài)`}
@@ -230,15 +231,17 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="bg-slate-50 text-on-surface-variant border-b border-outline-variant/5">
+                    <tr className="bg-slate-50 text-on-surface-variant border-b border-slate-100">
+                      <th className="px-4 py-3 font-semibold">Môn học</th>
                       <th className="px-4 py-3 font-semibold">Loại bài</th>
                       <th className="px-4 py-3 font-semibold text-center">Kỳ</th>
                       <th className="px-4 py-3 font-semibold text-right">Điểm</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-outline-variant/5">
+                  <tbody className="divide-y divide-slate-100">
                     {grades.length > 0 ? grades.map((g) => (
                       <tr key={g.id} className="hover:bg-primary/5 transition-colors">
+                        <td className="px-4 py-3 font-bold text-primary">{g.subject_name || `Môn ID: ${g.subject_id}`}</td>
                         <td className="px-4 py-3 font-semibold capitalize">{g.exam_type.replace('_', ' ')}</td>
                         <td className="px-4 py-3 text-center">Kỳ {g.semester} — {g.academic_year}</td>
                         <td className={`px-4 py-3 text-right font-bold ${g.score >= 8 ? 'text-secondary' : g.score >= 5 ? 'text-primary' : 'text-error'}`}>
@@ -247,7 +250,7 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
                       </tr>
                     )) : (
                       <tr>
-                        <td colSpan={3} className="px-4 py-8 text-center text-on-surface-variant text-xs">
+                        <td colSpan={4} className="px-4 py-8 text-center text-on-surface-variant text-xs">
                           {studentIds.length === 0 ? 'Chưa có dữ liệu học sinh được liên kết.' : 'Chưa có bài kiểm tra nào được nhập.'}
                         </td>
                       </tr>
@@ -255,7 +258,7 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
                   </tbody>
                 </table>
               </div>
-              <div className="p-3 bg-slate-50 border-t border-outline-variant/10">
+              <div className="p-3 bg-slate-50 border-t border-slate-100">
                 <div className="flex items-start gap-2">
                   <Info className="text-on-surface-variant w-3 h-3 mt-0.5" />
                   <p className="text-[9px] text-on-surface-variant italic leading-relaxed">Dữ liệu được truy xuất trực tiếp từ CSDL nhà trường qua API bảo mật.</p>
@@ -265,22 +268,15 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
           </section>
 
           {/* Right Column: Chat */}
-          <section className="col-span-12 lg:col-span-7 bg-white rounded-lg border border-outline-variant/10 shadow-2xl flex flex-col overflow-hidden">
-            <div className="p-5 border-b border-outline-variant/10 flex items-center justify-between bg-primary/5">
+          <section className="col-span-12 lg:col-span-7 bg-white rounded-lg border border-slate-100 shadow-2xl flex flex-col overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-primary/5">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-white shadow-md">
                   <Bot className="w-7 h-7" />
                 </div>
                 <div>
                   <h2 className="font-bold text-base">Chủ nhiệm ảo (RAG AI Assistant)</h2>
-                  <p className="text-xs text-secondary font-medium flex items-center gap-1.5 mt-0.5">
-                    <span className="w-2 h-2 bg-secondary rounded-full animate-pulse"></span> Đang trực tuyến • Sẵn sàng hỗ trợ
-                  </p>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-on-surface-variant cursor-pointer" />
-                <Settings className="w-5 h-5 text-on-surface-variant cursor-pointer" />
               </div>
             </div>
 
@@ -294,7 +290,7 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
                   )}
                   <div className={`p-4 rounded-2xl shadow-sm max-w-[80%] ${
                     msg.role === 'assistant' 
-                      ? 'bg-white border border-outline-variant/10 rounded-tl-none' 
+                      ? 'bg-white border border-slate-200 rounded-tl-none' 
                       : 'bg-primary text-on-primary rounded-tr-none'
                   }`}>
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
@@ -322,13 +318,13 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
             </div>
 
             {/* Chat Input */}
-            <div className="p-6 border-t border-outline-variant/10 bg-white">
+            <div className="p-6 border-t border-slate-100 bg-white">
               <div className="relative flex items-center max-w-4xl mx-auto">
                 <input 
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend(); }}
-                  className="w-full bg-slate-50 border border-outline-variant/20 rounded-2xl py-4 pl-6 pr-16 text-sm focus:ring-4 focus:ring-primary/10 focus:border-primary placeholder:text-on-surface-variant/50 shadow-inner transition-all" 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-6 pr-16 text-sm focus:outline-none placeholder:text-on-surface-variant/50 shadow-inner transition-all" 
                   placeholder="Hỏi về quy chế, tra cứu điểm hoặc nhận xét của giáo viên..." 
                   type="text"
                 />
@@ -339,16 +335,6 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
                 >
                   <Send className="w-5 h-5" />
                 </button>
-              </div>
-              <div className="flex justify-center gap-8 mt-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">RAG Policy Engine</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide">Secure SQL Gateway</span>
-                </div>
               </div>
             </div>
           </section>

@@ -39,7 +39,7 @@ class UserOut(BaseModel):
     id: int
     email: str
     full_name: str
-    role: str
+    role: List[str]
 
     class Config:
         from_attributes = True
@@ -212,6 +212,35 @@ def remove_student_from_class(
         raise HTTPException(status_code=404, detail="Student is not in this class")
     db.delete(db_cs)
     db.commit()
+
+
+@router.get("/{class_id}/teachers")
+def list_teachers_in_class(
+    class_id: int,
+    db: Session = Depends(get_db)
+):
+    """Lấy danh sách giáo viên bộ môn của một lớp."""
+    db_class = db.query(Class).filter(Class.id == class_id).first()
+    if not db_class:
+        raise HTTPException(status_code=404, detail="Class not found")
+        
+    assignments = db.query(ClassTeacher).filter(ClassTeacher.class_id == class_id).all()
+    res = []
+    for a in assignments:
+        res.append({
+            "teacher_id": a.teacher_id,
+            "teacher": {
+                "id": a.teacher.id,
+                "full_name": a.teacher.full_name,
+                "email": a.teacher.email
+            },
+            "subject_id": a.subject_id,
+            "subject": {
+                "id": a.subject.id,
+                "name": a.subject.name
+            }
+        })
+    return res
 
 
 @router.post("/{class_id}/teachers/{teacher_id}", status_code=status.HTTP_201_CREATED)

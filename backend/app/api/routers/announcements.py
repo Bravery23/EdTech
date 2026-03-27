@@ -6,8 +6,8 @@ import datetime
 
 from app.core.db import get_db
 from app.core.deps import get_current_user, require_role
-from app.models.user import User
-from app.models.school import Announcement, ClassTeacher, Class
+from app.models.user import User, ParentStudent
+from app.models.school import Announcement, ClassTeacher, Class, ClassStudent
 
 router = APIRouter()
 
@@ -17,12 +17,20 @@ class AnnouncementCreate(BaseModel):
     content: str
     class_id: int
 
+class TeacherInfo(BaseModel):
+    full_name: str
+    role: List[str]
+
+    class Config:
+        from_attributes = True
+
 class AnnouncementOut(BaseModel):
     id: int
     title: str
     content: str
     class_id: int
     teacher_id: int
+    teacher: Optional[TeacherInfo] = None
     created_at: datetime.datetime
 
     class Config:
@@ -46,6 +54,48 @@ def get_class_announcements(
     return announcements
 
 
+@router.get("/my", response_model=List[AnnouncementOut])
+def get_my_announcements(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Lấy danh sách thông báo liên quan đến user hiện tại."""
+    role_set = set(current_user.role or [])
+    
+    if "admin" in role_set:
+        return db.query(Announcement).order_by(Announcement.created_at.desc()).limit(limit).all()
+        
+    class_ids = set()
+    
+    if "student" in role_set:
+        cs = db.query(ClassStudent).filter(ClassStudent.student_id == current_user.id).all()
+        class_ids.update([c.class_id for c in cs])
+        
+    if "parent" in role_set:
+        children = db.query(ParentStudent).filter(ParentStudent.parent_id == current_user.id).all()
+        child_ids = [c.student_id for c in children]
+        if child_ids:
+            cs = db.query(ClassStudent).filter(ClassStudent.student_id.in_(child_ids)).all()
+            class_ids.update([c.class_id for c in cs])
+            
+    if "homeroom_teacher" in role_set or "subject_teacher" in role_set:
+        classes_hr = db.query(Class).filter(Class.homeroom_teacher_id == current_user.id).all()
+        class_ids.update([c.id for c in classes_hr])
+        
+        ct = db.query(ClassTeacher).filter(ClassTeacher.teacher_id == current_user.id).all()
+        class_ids.update([c.class_id for c in ct])
+        
+    if not class_ids:
+        return []
+        
+    announcements = db.query(Announcement).filter(
+        Announcement.class_id.in_(list(class_ids))
+    ).order_by(Announcement.created_at.desc()).limit(limit).all()
+    
+    return announcements
+
+
 @router.post("/", response_model=AnnouncementOut, status_code=status.HTTP_201_CREATED)
 def create_announcement(
     ann_in: AnnouncementCreate,
@@ -58,7 +108,8 @@ def create_announcement(
     if not school_class:
         raise HTTPException(status_code=404, detail="Class not found")
         
-    role_set = set(r.strip() for r in (current_user.role or "").split(","))
+    roles = current_user.role if isinstance(current_user.role, list) else (current_user.role or "").split(",")
+    role_set = set(r.strip() for r in roles if r)
     
     # If not admin, check if teacher is allowed
     if "admin" not in role_set:
