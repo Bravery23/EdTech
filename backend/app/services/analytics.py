@@ -3,10 +3,10 @@ class AnalyticsService:
         pass
 
     def analyze_student_sentiment(self, text: str) -> dict:
-        \"\"\"
+        """
         Analyzes the sentiment and engagement of a student's message.
         In a real application, this would call an NLP model or LLM.
-        \"\"\"
+        """
         text_lower = text.lower()
         if any(word in text_lower for word in ['khó quá', 'không hiểu', 'chán', 'nản', 'cho đáp án']):
             return {
@@ -24,9 +24,9 @@ class AnalyticsService:
         }
 
     def predict_early_warning(self, student_id: int, recent_scores: list[float]) -> dict:
-        \"\"\"
+        """
         Predicts if a student needs early warning based on recent score trajectory.
-        \"\"\"
+        """
         if len(recent_scores) < 3:
             return {"warning": False}
             

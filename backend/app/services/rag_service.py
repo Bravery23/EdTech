@@ -57,16 +57,16 @@ class RAGService:
         prompt_template = PromptTemplate(
             input_variables=["context", "sql_data", "query"],
             template="""Bạn là giáo viên chủ nhiệm ảo, giao tiếp với phụ huynh học sinh.
-Phụ huynh hỏi: "{query}"
+            Phụ huynh hỏi: "{query}"
 
-Thông diễn Quy chế/Sự kiện:
-{context}
+            Thông diễn Quy chế/Sự kiện:
+            {context}
 
-Thông tin Điểm số truy xuất (Text-to-SQL result):
-{sql_data}
+            Thông tin Điểm số truy xuất (Text-to-SQL result):
+            {sql_data}
 
-Nhiệm vụ: Trả lời phụ huynh một cách lịch sự, thấu hiểu. Tổng hợp từ quy chế và điểm số thực tế. Nếu điểm có xu hướng giảm, hãy nhắc nhở nhẹ nhàng.
-Câu trả lời:"""
+            Nhiệm vụ: Trả lời phụ huynh một cách lịch sự, thấu hiểu. Tổng hợp từ quy chế và điểm số thực tế. Nếu điểm có xu hướng giảm, hãy nhắc nhở nhẹ nhàng.
+            Câu trả lời:"""
         )
         return prompt_template.format(context=context, sql_data=sql_data, query=query)
 

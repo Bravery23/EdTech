@@ -2,6 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import auth, users, chat, rag, admin, classes, grades, announcements, subjects
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="EdTech Virtual Teacher API",
     description="Smart Virtual Teacher System Integrated with RAG",

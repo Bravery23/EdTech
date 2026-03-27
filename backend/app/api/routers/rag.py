@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.config import settings
 from app.core.deps import get_current_user
-from app.services.rag_service import RAGService
+from app.services.agent_service import EdTechAgentService
 from app.services.vector_db import VectorStoreService
 from app.models.chat import ChatMessage
 from app.models.user import User, ParentStudent
@@ -17,13 +17,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-_rag_service = None
+_agent_service = None
 
-def get_rag_service() -> RAGService:
-    global _rag_service
-    if _rag_service is None:
-        _rag_service = RAGService()
-    return _rag_service
+def get_agent_service() -> EdTechAgentService:
+    global _agent_service
+    if _agent_service is None:
+        _agent_service = EdTechAgentService()
+    return _agent_service
 
 
 class ChatRequest(BaseModel):
@@ -49,7 +49,7 @@ async def send_message(
                 else "[MOCK] Điểm của cháu đang ổn định. Anh/chị lưu ý phần thông báo lịch thi."
             )
         }
-
+    
     # Find teacher_id to scope documents
     teacher_id = None
     if req.role == "student":
@@ -66,19 +66,36 @@ async def send_message(
                 if teacher_assign:
                     teacher_id = teacher_assign.teacher_id
 
-    # --- Retrieve context from vector DB (graceful fallback) ---
-    context = ""
-    try:
-        vector_service = VectorStoreService(db)
-        # Note: VectorStoreService.similarity_search will also need to filter out deleted documents
-        docs = vector_service.similarity_search(
-            req.query,
-            subject_filter=req.subject if req.role == "student" else None,
-            teacher_id=teacher_id
-        )
-        context = "\n".join([d.content for d in docs])
-    except Exception as e:
-        logger.warning(f"Vector DB unavailable, skipping context: {e}")
+    # Define a callback for Student Agent to search knowledge base
+    def knowledge_search_func(search_query: str) -> str:
+        try:
+            vector_service = VectorStoreService(db)
+            logger.info(f"[VectorDB Tool] Searching for query: '{search_query}'")
+            docs = vector_service.similarity_search(
+                query=search_query,
+                class_id=school_class.class_id if school_class else None,
+                subject_id=subject_obj.id if subject_obj else None,
+                teacher_id=teacher_id,
+                top_k=4
+            )
+            return "\n".join([d.content for d in docs])
+        except Exception as e:
+            logger.warning(f"Vector DB tool error: {e}")
+            return "Không thể truy cập cơ sở dữ liệu nội bộ."
+            
+    # Define a callback for Parent Agent to search school policy
+    def search_policy_func(search_query: str) -> str:
+        try:
+            vector_service = VectorStoreService(db)
+            logger.info(f"[VectorDB Tool] Searching policy for query: '{search_query}'")
+            docs = vector_service.similarity_search(
+                query=search_query,
+                top_k=3
+            )
+            return "\n".join([d.content for d in docs])
+        except Exception as e:
+            logger.warning(f"Vector DB tool error: {e}")
+            return ""
 
     # Fetch chat history if session_id is provided
     chat_history = ""
@@ -116,37 +133,34 @@ async def send_message(
         chat_history = "\n".join(history_lines)
 
     # --- Streaming Response ---
-    rag_service = get_rag_service()
+    agent_service = get_agent_service()
     
     if req.stream:
         async def response_generator():
             full_response = ""
             if req.role == "student":
-                # if len(context.strip()) < 10:
-                #     yield f"data: Thầy chưa tìm thấy tài liệu liên quan trong hệ thống bài giảng môn {req.subject}. Em có thể làm rõ câu hỏi hơn không?\n\n"
-                #     full_response = "Thầy chưa tìm thấy tài liệu liên quan..."
-                # else:
-                #     prompt = rag_service.socratic_prompt(context, req.query, req.subject, chat_history)
-                #     async for chunk in rag_service.llm.astream(prompt):
-                #         full_response += chunk.content
-                #         # SSE format: data: <content>\n\n
-                #         # replace newlines in chunks to avoid breaking SSE format easily, 
-                #         # or just rely on proper client parsing standard
-                #         cleaned_chunk = chunk.content.replace("\n", "\\n")
-                #         yield f"data: {cleaned_chunk}\n\n"
-                prompt = rag_service.temp_test_prompt(context, req.query, req.subject, chat_history)
-                async for chunk in rag_service.llm.astream(prompt):
-                    full_response += chunk.content
-                    # SSE format: data: <content>\n\n
-                    # replace newlines in chunks to avoid breaking SSE format easily, 
-                    # or just rely on proper client parsing standard
-                    cleaned_chunk = chunk.content.replace("\n", "\\n")
+                async for chunk in agent_service.student_agent_stream(
+                    query=req.query,
+                    subject=req.subject,
+                    chat_history_str=chat_history,
+                    knowledge_search_func=knowledge_search_func
+                ):
+                    full_response += chunk
+                    cleaned_chunk = chunk.replace("\n", "\\n")
                     yield f"data: {cleaned_chunk}\n\n"
+                    
             elif req.role == "parent":
-                prompt = rag_service.hybrid_admin_prompt(context, sql_data, req.query)
-                async for chunk in rag_service.llm.astream(prompt):
-                    full_response += chunk.content
-                    cleaned_chunk = chunk.content.replace("\n", "\\n")
+                def get_grades_func() -> str:
+                    return sql_data
+                    
+                async for chunk in agent_service.parent_agent_stream(
+                    query=req.query,
+                    chat_history_str=chat_history,
+                    get_grades_func=get_grades_func,
+                    search_policy_func=search_policy_func
+                ):
+                    full_response += chunk
+                    cleaned_chunk = chunk.replace("\n", "\\n")
                     yield f"data: {cleaned_chunk}\n\n"
                     
             yield "data: [DONE]\n\n"
@@ -162,13 +176,22 @@ async def send_message(
 
         return StreamingResponse(response_generator(), media_type="text/event-stream")
 
-    # --- Standard Non-Streaming Response ---
+    # --- Standard Non-Streaming Response (Fallback if used) ---
+    # In full production we should also map these to Agent methods. For now just wrap stream.
+    # To keep it simple, we can just consume the stream if non-streaming is requested.
+    full_response = ""
     if req.role == "student":
-        response_text = await rag_service.get_academic_answer(req.query, context, req.subject, chat_history)
+        async for chunk in agent_service.student_agent_stream(req.query, req.subject, chat_history, knowledge_search_func):
+            full_response += chunk
     elif req.role == "parent":
-        response_text = await rag_service.get_admin_answer(req.query, context, sql_data)
+        def get_grades_func() -> str:
+            return sql_data
+        async for chunk in agent_service.parent_agent_stream(req.query, chat_history, get_grades_func, search_policy_func):
+            full_response += chunk
     else:
         raise HTTPException(status_code=400, detail="Invalid role. Must be 'student' or 'parent'.")
+        
+    response_text = full_response
 
     # --- Persist messages to DB if session_id provided ---
     if req.session_id:

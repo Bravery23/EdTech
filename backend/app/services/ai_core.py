@@ -71,20 +71,13 @@ class AICore:
 
     def query_class_knowledge(self, query: str, class_id: int, subject_id: Optional[int] = None, top_k: int = 4) -> List[Document]:
         """
-        Query Vector store making sure we only fetch information relevant to the specified class.
-        Optionally filter it down to a specific subject.
+        Truy vấn kho kiến thức của lớp học, đảm bảo chỉ lấy thông tin liên quan đến lớp/môn được yêu cầu.
+        Sử dụng VectorDB Service để thực hiện tìm kiếm tương đồng.
         """
-        query_embedding = self.vector_service.embeddings.embed_query(query)
-        
-        stmt = self.db.query(Document).filter(Document.deleted_at == None)
-        
-        # Isolate results heavily to strictly requested class_id context
-        stmt = stmt.filter(Document.metadata_json["class_id"].astext.cast(Integer) == class_id)
-        
-        if subject_id:
-             stmt = stmt.filter(Document.metadata_json["subject_id"].astext.cast(Integer) == subject_id)
-            
-        distance_expr = Document.embedding.cosine_distance(query_embedding)
-        docs = stmt.filter(distance_expr < 0.5).order_by(distance_expr).limit(top_k).all()
-        
-        return docs
+        return self.vector_service.similarity_search(
+            query=query, 
+            class_id=class_id, 
+            subject_id=subject_id, 
+            top_k=top_k,
+            distance_threshold=0.5 # Ngưỡng mặc định cho cosine distance
+        )
