@@ -30,7 +30,6 @@ class GradeOut(BaseModel):
     id: int
     student_id: int
     subject_id: int
-    subject_name: Optional[str] = None
     semester: int
     academic_year: str
     exam_type: str
@@ -61,13 +60,7 @@ def get_student_grades(
     query = db.query(Grade).filter(Grade.student_id == student_id, Grade.deleted_at == None)
     if subject_id:
         query = query.filter(Grade.subject_id == subject_id)
-        
-    grades = query.all()
-    # Populate subject_name manually if relying on DB relationship isn't directly mapped in pydantic
-    for g in grades:
-        if hasattr(g, 'subject'):
-            setattr(g, 'subject_name', g.subject.name)
-    return grades
+    return query.all()
 
 
 @router.get("/class/{class_id}", response_model=List[GradeOut])
@@ -86,11 +79,7 @@ def get_class_grades(
     if subject_id:
         query = query.filter(Grade.subject_id == subject_id)
         
-    grades = query.all()
-    for g in grades:
-        if hasattr(g, 'subject'):
-            setattr(g, 'subject_name', g.subject.name)
-    return grades
+    return query.all()
 
 
 @router.post("/", response_model=GradeOut, status_code=status.HTTP_201_CREATED)
@@ -104,8 +93,6 @@ def create_grade(
     db.add(new_grade)
     db.commit()
     db.refresh(new_grade)
-    if hasattr(new_grade, 'subject'):
-        setattr(new_grade, 'subject_name', new_grade.subject.name)
     return new_grade
 
 
@@ -131,8 +118,6 @@ def update_grade(
     
     db.commit()
     db.refresh(db_grade)
-    if hasattr(db_grade, 'subject'):
-        setattr(db_grade, 'subject_name', db_grade.subject.name)
     return db_grade
 
 

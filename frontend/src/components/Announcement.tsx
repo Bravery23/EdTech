@@ -30,6 +30,7 @@ function formatTimeAgo(dateString: string) {
 export default function NotificationBar({ onClose }: { onClose?: () => void }) {
   const [showNotifications, setShowNotifications] = useState(true);
   const [notifications, setNotifications] = useState<Announcement[]>([]);
+  const [selectedNotification, setSelectedNotification] = useState<Announcement | null>(null);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -103,6 +104,7 @@ export default function NotificationBar({ onClose }: { onClose?: () => void }) {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05 }} // Hiệu ứng thác nước (stagger)
+                      onClick={() => setSelectedNotification(n)}
                       className="p-3 rounded-2xl bg-slate-50 hover:bg-blue-50/50 transition-all cursor-pointer group border border-transparent hover:border-blue-100"
                     >
                       <div className="flex justify-between items-start mb-1">
@@ -116,7 +118,7 @@ export default function NotificationBar({ onClose }: { onClose?: () => void }) {
                       <p className="text-xs font-bold text-on-surface mb-1 group-hover:text-primary transition-colors">
                         {n.title}
                       </p>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                      <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
                         {n.content}
                       </p>
                     </motion.div>
@@ -138,6 +140,54 @@ export default function NotificationBar({ onClose }: { onClose?: () => void }) {
                 </div>
               </div>
             </motion.aside>
+
+            {/* Modal hiển thị chi tiết thông báo */}
+            {selectedNotification && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
+                  onClick={() => setSelectedNotification(null)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col"
+                >
+                  <div className="p-5 border-b border-slate-100 flex justify-between items-start bg-primary/5">
+                    <div>
+                      <h3 className="font-bold text-lg text-primary leading-tight pr-4">
+                        {selectedNotification.title}
+                      </h3>
+                      <p className="text-xs text-on-surface-variant mt-2 font-medium">
+                        Từ: {selectedNotification.teacher?.full_name}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => setSelectedNotification(null)} 
+                      className="p-1.5 hover:bg-black/5 rounded-full transition-colors shrink-0"
+                    >
+                      <X className="w-5 h-5 text-on-surface-variant"/>
+                    </button>
+                  </div>
+                  <div className="p-6 overflow-y-auto max-h-[60vh] text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                    {selectedNotification.content}
+                  </div>
+                  <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+                    <span>{formatTimeAgo(selectedNotification.created_at)}</span>
+                    <button 
+                      onClick={() => setSelectedNotification(null)}
+                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors"
+                    >
+                      Đóng
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
           </>
         )}
       </AnimatePresence>

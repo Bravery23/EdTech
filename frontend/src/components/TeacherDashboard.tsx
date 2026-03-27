@@ -71,11 +71,6 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [classSubjects, setClassSubjects] = useState<Subject[]>([]); // Môn GV dạy ở lớp hiện tại
   const [announcements, setAnnouncements] = useState<any[]>([]);
 
-  // Grades state
-  const [semester, setSemester] = useState<number>(1);
-  const [grades, setGrades] = useState<any[]>([]);
-  const [gradeInputs, setGradeInputs] = useState<Record<string, string>>({});
-
   // Form states
   const [annTitle, setAnnTitle] = useState("");
   const [annContent, setAnnContent] = useState("");
@@ -93,7 +88,7 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   const fetchClasses = async () => {
     try {
-      const res = await fetch(`${API}/classes/`, { headers });
+      const res = await fetch(`${API}/classes/teacher-classes`, { headers });
       if (res.ok) {
         const data: ClassInfo[] = await res.json();
         setClasses(data);
@@ -123,7 +118,9 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
   const fetchDocuments = async (classId?: number) => {
     try {
-      const url = classId ? `${API}/admin/documents?class_id=${classId}` : `${API}/admin/documents`;
+      const url = classId
+        ? `${API}/admin/documents?class_id=${classId}`
+        : `${API}/admin/documents`;
       const res = await fetch(url, { headers });
       if (res.ok) setDocuments(await res.json());
     } catch (e) {
@@ -151,44 +148,22 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     }
   };
 
-  const fetchClassGrades = async (classId: number, subjectId: number, currentSem: number) => {
-    try {
-      const res = await fetch(`${API}/grades/class/${classId}?subject_id=${subjectId}`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setGrades(data);
-        const inputs: Record<string, string> = {};
-        data.forEach((g: any) => {
-          if (g.semester === currentSem) {
-            inputs[`${g.student_id}_${g.exam_type}`] = String(g.score);
-          }
-        });
-        setGradeInputs(inputs);
-      }
-    } catch (e) { console.error(e); }
-  };
-
-  useEffect(() => {
-    if (selectedClass && uploadSubjectId) {
-      fetchClassGrades(selectedClass.id, uploadSubjectId, semester);
-    } else {
-      setGrades([]);
-      setGradeInputs({});
-    }
-  }, [selectedClass, uploadSubjectId, semester]);
-
   const fetchClassSubjects = async (classId: number) => {
     try {
-      const res = await fetch(`${API}/classes/${classId}/teachers`, { headers });
+      const res = await fetch(`${API}/classes/${classId}/teachers`, {
+        headers,
+      });
       if (res.ok) {
         const assignments = await res.json();
-        const myAssignments = assignments.filter((a: any) => a.teacher_id === user?.id);
+        const myAssignments = assignments.filter(
+          (a: any) => a.teacher_id === user?.id,
+        );
         const mySubjects = myAssignments.map((a: any) => a.subject);
         setClassSubjects(mySubjects);
-        
+
         // Find if user is homeroom for this selected class ID
         // Note: selectedClass might not be updated yet when this is called, so we find it from `classes`
-        const targetClass = classes.find(c => c.id === classId);
+        const targetClass = classes.find((c) => c.id === classId);
         const isHomeroom = targetClass?.homeroom_teacher_id === user?.id;
 
         if (isHomeroom) {
@@ -220,7 +195,7 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       alert("Vui lòng chọn file và đảm bảo đã chọn lớp.");
       return;
     }
-    
+
     // Homeroom teachers can upload without subject. Subject teachers MUST pick a subject.
     const isHomeroom = selectedClass.homeroom_teacher_id === user?.id;
     if (!uploadSubjectId && !isHomeroom) {
@@ -272,68 +247,6 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
     }
   };
 
-  const handleGradeBlur = async (studentId: number, examType: string, value: string) => {
-    if (!selectedClass || !uploadSubjectId) return;
-    const score = parseFloat(value);
-    if (isNaN(score) || score < 0 || score > 10) {
-      // Revert to old value if invalid
-      const existing = grades.find(g => g.student_id === studentId && g.exam_type === examType && g.semester === semester);
-      setGradeInputs(prev => ({
-        ...prev,
-        [`${studentId}_${examType}`]: existing ? String(existing.score) : ""
-      }));
-      return;
-    }
-
-    const existingGrade = grades.find(g => g.student_id === studentId && g.exam_type === examType && g.semester === semester);
-    
-    // Only update if changed
-    if (existingGrade && existingGrade.score === score) return;
-
-    try {
-      let res;
-      if (existingGrade) {
-        res = await fetch(`${API}/grades/${existingGrade.id}`, {
-          method: "PUT",
-          headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({ score })
-        });
-      } else {
-        res = await fetch(`${API}/grades/`, {
-          method: "POST",
-          headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            student_id: studentId,
-            subject_id: uploadSubjectId,
-            semester,
-            academic_year: selectedClass.academic_year,
-            exam_type: examType,
-            score
-          })
-        });
-      }
-
-      if (res.ok) {
-        const updatedOrNew = await res.json();
-        setGrades(prev => {
-          if (existingGrade) {
-            return prev.map(g => g.id === existingGrade.id ? updatedOrNew : g);
-          }
-          return [...prev, updatedOrNew];
-        });
-      }
-    } catch (e) {
-      console.error("Lỗi cập nhật điểm:", e);
-    }
-  };
-
-  const examTypes = [
-    { key: "15p", label: "15 Phút" },
-    { key: "1_tiet", label: "1 Tiết" },
-    { key: "giua_ky", label: "Giữa Kỳ" },
-    { key: "cuoi_ky", label: "Cuối Kỳ" }
-  ];
-
   const handleSendAnnouncement = async () => {
     if (!annTitle.trim() || !annContent.trim()) {
       alert("Vui lòng nhập tiêu đề và nội dung thông báo.");
@@ -344,12 +257,22 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       return;
     }
     setIsSendingAnn(true);
+
+    let prefix = "";
+    const isHomeroom = selectedClass.homeroom_teacher_id === user?.id;
+    if (isHomeroom) prefix += "GVCN";
+    if (classSubjects.length > 0) {
+      if (prefix) prefix += " & ";
+      prefix += `GVBM ${classSubjects.map((s) => s.name).join(", ")}`;
+    }
+    const finalTitle = prefix ? `[${prefix}] ${annTitle}` : annTitle;
+
     try {
       const res = await fetch(`${API}/announcements/`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: annTitle,
+          title: finalTitle,
           content: annContent,
           class_id: selectedClass.id,
         }),
@@ -454,19 +377,28 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   <span className="text-primary">{user?.full_name}!</span>
                 </h2>
                 <p className="text-lg text-on-surface-variant max-w-xl leading-relaxed">
-                  {classes.filter(c => c.homeroom_teacher_id === user?.id).length > 0 ? (
+                  {classes.filter((c) => c.homeroom_teacher_id === user?.id)
+                    .length > 0 ? (
                     <>
-                      Bạn đang là <strong>Giáo viên chủ nhiệm của lớp {classes.filter(c => c.homeroom_teacher_id === user?.id).map(c => c.name).join(', ')}</strong>. Tham gia giảng dạy tại tổng cộng <strong>{classes.length}</strong> lớp.
+                      Bạn đang là{" "}
+                      <strong>
+                        Giáo viên chủ nhiệm của lớp{" "}
+                        {classes
+                          .filter((c) => c.homeroom_teacher_id === user?.id)
+                          .map((c) => c.name)
+                          .join(", ")}
+                      </strong>
+                      . Tham gia giảng dạy tại tổng cộng{" "}
+                      <strong>{classes.length}</strong> lớp.
                     </>
                   ) : (
                     <>
-                      Bạn đang quản lý <strong>{classes.length}</strong> lớp học. Click
-                      vào tab "Lớp học" để xem danh sách học sinh.
+                      Bạn đang quản lý <strong>{classes.length}</strong> lớp
+                      học. Click vào tab "Lớp học" để xem danh sách học sinh.
                     </>
                   )}
                 </p>
               </div>
-
             </div>
             <div className="bg-gradient-to-br from-secondary to-secondary-dim text-on-secondary rounded-lg p-6 relative overflow-hidden max-w-md">
               <div className="relative z-10">
@@ -500,7 +432,9 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                   }`}
                 >
                   {cls.name}
-                  {cls.homeroom_teacher_id === user?.id && <span className="text-yellow-400">★</span>}
+                  {cls.homeroom_teacher_id === user?.id && (
+                    <span className="text-yellow-400">★</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -591,53 +525,74 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
 
               {/* Class Selector */}
               <div className="mb-6">
-                 <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-2">
-                    Nhập tài liệu cho lớp
-                  </label>
-                  <div className="flex gap-3 flex-wrap">
-                    {classes.map((cls) => (
-                      <button
-                        key={cls.id}
-                        onClick={() => selectClass(cls)}
-                        className={`px-4 py-2 rounded-md font-bold text-sm transition-colors flex items-center gap-2 ${
-                          selectedClass?.id === cls.id
-                            ? "bg-primary text-white"
-                            : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
-                        }`}
-                      >
-                        {cls.name}
-                        {cls.homeroom_teacher_id === user?.id && <span className="text-yellow-400">★</span>}
-                      </button>
-                    ))}
-                  </div>
+                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-2">
+                  Nhập tài liệu cho lớp
+                </label>
+                <div className="flex gap-3 flex-wrap">
+                  {classes.map((cls) => (
+                    <button
+                      key={cls.id}
+                      onClick={() => selectClass(cls)}
+                      className={`px-4 py-2 rounded-md font-bold text-sm transition-colors flex items-center gap-2 ${
+                        selectedClass?.id === cls.id
+                          ? "bg-primary text-white"
+                          : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
+                      }`}
+                    >
+                      {cls.name}
+                      {cls.homeroom_teacher_id === user?.id && (
+                        <span className="text-yellow-400">★</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Role Indicator */}
               {selectedClass && (
                 <div className="mb-8 p-4 bg-primary/5 border border-primary/20 rounded-md flex items-center gap-3">
-                   <div className="p-2 bg-primary/10 rounded-full text-primary">
-                     <BookOpen className="w-5 h-5" />
-                   </div>
-                   <p className="text-sm text-on-surface">
-                     Tại lớp <strong className="text-primary">{selectedClass.name}</strong>, bạn đang giữ vai trò:{' '}
-                     {classSubjects.length > 0 ? (
-                       <span className="font-bold underline">Giáo viên bộ môn ({classSubjects.map(s => s.name).join(', ')})</span>
-                     ) : selectedClass.homeroom_teacher_id === user?.id ? (
-                       <span className="font-bold underline text-secondary">Giáo viên Chủ nhiệm</span>
-                     ) : (
-                       <span className="font-bold underline text-error">Chưa được phân công</span>
-                     )}
-                     {selectedClass.homeroom_teacher_id === user?.id && classSubjects.length > 0 && (
-                       <span> và <span className="font-bold underline text-secondary">Giáo viên Chủ nhiệm</span></span>
-                     )}
-                   </p>
+                  <div className="p-2 bg-primary/10 rounded-full text-primary">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <p className="text-sm text-on-surface">
+                    Tại lớp{" "}
+                    <strong className="text-primary">
+                      {selectedClass.name}
+                    </strong>
+                    , bạn đang giữ vai trò:{" "}
+                    {classSubjects.length > 0 ? (
+                      <span className="font-bold underline">
+                        Giáo viên bộ môn (
+                        {classSubjects.map((s) => s.name).join(", ")})
+                      </span>
+                    ) : selectedClass.homeroom_teacher_id === user?.id ? (
+                      <span className="font-bold underline text-secondary">
+                        Giáo viên Chủ nhiệm
+                      </span>
+                    ) : (
+                      <span className="font-bold underline text-error">
+                        Chưa được phân công
+                      </span>
+                    )}
+                    {selectedClass.homeroom_teacher_id === user?.id &&
+                      classSubjects.length > 0 && (
+                        <span>
+                          {" "}
+                          và{" "}
+                          <span className="font-bold underline text-secondary">
+                            Giáo viên Chủ nhiệm
+                          </span>
+                        </span>
+                      )}
+                  </p>
                 </div>
               )}
 
               {/* Upload Form */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                 <div className="space-y-4">
-                  {(classSubjects.length > 0 || selectedClass?.homeroom_teacher_id === user?.id) && (
+                  {(classSubjects.length > 0 ||
+                    selectedClass?.homeroom_teacher_id === user?.id) && (
                     <div>
                       <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-2">
                         Phân loại tài liệu
@@ -646,11 +601,15 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         className="w-full bg-surface-container-low border-none rounded-sm p-3 text-sm focus:ring-2 focus:ring-primary"
                         value={uploadSubjectId ?? ""}
                         onChange={(e) =>
-                          setUploadSubjectId(e.target.value ? Number(e.target.value) : null)
+                          setUploadSubjectId(
+                            e.target.value ? Number(e.target.value) : null,
+                          )
                         }
                       >
                         {selectedClass?.homeroom_teacher_id === user?.id && (
-                          <option value="">Tài liệu chung (Dành cho Học sinh & Phụ huynh)</option>
+                          <option value="">
+                            Tài liệu chung (Dành cho Học sinh & Phụ huynh)
+                          </option>
                         )}
                         {classSubjects.map((s) => (
                           <option key={s.id} value={s.id}>
@@ -723,96 +682,6 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           </section>
         )}
 
-        {/* GRADES */}
-        {activeTab === "grades" && (
-          <section>
-            <div className="bg-surface-container-lowest rounded-lg overflow-hidden shadow-sm">
-              <div className="px-8 py-6 border-b border-outline-variant/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-2xl font-bold tracking-tight">
-                    Nhập điểm Bảng tính
-                  </h3>
-                  <p className="text-sm text-on-surface-variant mt-1">
-                    Lớp: {selectedClass?.name || "..."} — Tự động lưu khi nhập
-                  </p>
-                </div>
-                
-                <div className="flex gap-4">
-                  <select
-                    className="bg-surface-container-low border-none rounded-md px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-primary"
-                    value={semester}
-                    onChange={(e) => setSemester(Number(e.target.value))}
-                  >
-                    <option value={1}>Học kỳ 1</option>
-                    <option value={2}>Học kỳ 2</option>
-                  </select>
-
-                  <select
-                    className="bg-surface-container-low border-none rounded-md px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-primary"
-                    value={uploadSubjectId ?? ""}
-                    onChange={(e) => setUploadSubjectId(Number(e.target.value) || null)}
-                  >
-                    <option value="">-- Chọn môn dạy --</option>
-                    {classSubjects.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-surface-container-lowest text-on-surface-variant border-b border-outline-variant/10 text-xs uppercase tracking-wider">
-                      <th className="px-8 py-4 font-semibold">Học sinh</th>
-                      {examTypes.map(et => (
-                        <th key={et.key} className="px-4 py-4 font-semibold text-center">{et.label}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-outline-variant/5">
-                    {(!selectedClass || !uploadSubjectId) ? (
-                      <tr>
-                        <td colSpan={5} className="px-8 py-10 text-center text-on-surface-variant text-sm">
-                          Vui lòng chọn Lớp và Môn học để nhập điểm.
-                        </td>
-                      </tr>
-                    ) : students.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-8 py-10 text-center text-on-surface-variant text-sm">
-                          Lớp chưa có học sinh.
-                        </td>
-                      </tr>
-                    ) : students.map((s) => (
-                      <tr key={s.student_id} className="hover:bg-surface-bright transition-colors">
-                        <td className="px-8 py-3">
-                          <span className="font-bold text-sm">{s.student.full_name}</span>
-                        </td>
-                        {examTypes.map(et => {
-                          const inputKey = `${s.student_id}_${et.key}`;
-                          return (
-                            <td key={et.key} className="px-4 py-3 text-center">
-                              <input
-                                type="number"
-                                min="0" max="10" step="0.1"
-                                className="w-20 text-center bg-surface-container-low border-none rounded-md p-2 text-sm focus:ring-2 focus:ring-primary font-bold"
-                                value={gradeInputs[inputKey] ?? ""}
-                                onChange={e => setGradeInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
-                                onBlur={e => handleGradeBlur(s.student_id, et.key, e.target.value)}
-                                placeholder="--"
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-        )}
-
         {/* ANNOUNCEMENTS */}
         {activeTab === "announcements" && (
           <section>
@@ -838,7 +707,9 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                         }`}
                       >
                         {cls.name}
-                        {cls.homeroom_teacher_id === user?.id && <span className="text-yellow-400">★</span>}
+                        {cls.homeroom_teacher_id === user?.id && (
+                          <span className="text-yellow-400">★</span>
+                        )}
                       </button>
                     ))}
                   </div>

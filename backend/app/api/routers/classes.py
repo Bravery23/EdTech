@@ -107,6 +107,31 @@ def list_classes(
     return db.query(Class).offset(skip).limit(limit).all()
 
 
+@router.get("/teacher-classes", response_model=List[ClassOut])
+def list_teacher_classes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Lấy danh sách các lớp mà giáo viên đang quản lý hoặc giảng dạy."""
+    role_set = set(current_user.role or [])
+    if "admin" in role_set:
+        return db.query(Class).all()
+
+    # Lớp mà user làm GVCN
+    homeroom_classes = db.query(Class).filter(Class.homeroom_teacher_id == current_user.id).all()
+    
+    # Lớp mà user làm GVBM
+    subject_assignments = db.query(ClassTeacher).filter(ClassTeacher.teacher_id == current_user.id).all()
+    subject_class_ids = [a.class_id for a in subject_assignments]
+    subject_classes = db.query(Class).filter(Class.id.in_(subject_class_ids)).all()
+    
+    # Gộp và loại bỏ trùng lặp (deduplicate)
+    all_classes_dict = {c.id: c for c in homeroom_classes + subject_classes}
+    
+    # Sắp xếp theo tên lớp
+    return sorted(list(all_classes_dict.values()), key=lambda x: x.name)
+
+
 
 @router.post("/", response_model=ClassOut, status_code=status.HTTP_201_CREATED)
 def create_class(
