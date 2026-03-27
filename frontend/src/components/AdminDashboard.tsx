@@ -24,7 +24,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [showCreateUser, setShowCreateUser] = useState(false);
-  const [createForm, setCreateForm] = useState({ email: '', full_name: '', password: '', role: 'student' });
+  const [createForm, setCreateForm] = useState({ email: '', full_name: '', password: '', role: 'student', linkedUserId: '' });
   const [isCreating, setIsCreating] = useState(false);
   
   // Data for classes tab
@@ -80,6 +80,23 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const res = await fetch(`${API}/users/${userId}`, { method: 'DELETE', headers });
       if (res.ok || res.status === 204) {
         setUsers(prev => prev.filter(u => u.id !== userId));
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteClass = async (classId: number) => {
+    if (!confirm('Bạn có chắc muốn xóa lớp học này? Hành động này không thể hoàn tác và có thể sẽ xóa toàn bộ dữ liệu học sinh, giáo viên thuộc lớp này!')) return;
+    try {
+      const res = await fetch(`${API}/classes/${classId}`, { method: 'DELETE', headers });
+      if (res.ok || res.status === 204) {
+        setSchoolClasses(prev => prev.filter(c => c.id !== classId));
+        if (selectedClass?.id === classId) {
+          setShowClassModal(false);
+          setSelectedClass(null);
+        }
+      } else {
+        const err = await res.json();
+        alert('Lỗi: ' + (err.detail || 'Unknown Error'));
       }
     } catch (e) { console.error(e); }
   };
@@ -173,8 +190,24 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         })
       });
       if (res.ok) {
+        const newUser = await res.json();
+        
+        if (createForm.linkedUserId) {
+          const parentId = createForm.role === 'parent' ? newUser.id : createForm.linkedUserId;
+          const studentId = createForm.role === 'student' ? newUser.id : createForm.linkedUserId;
+          
+          try {
+            await fetch(`${API}/users/${parentId}/students/${studentId}`, {
+              method: 'POST',
+              headers
+            });
+          } catch (linkErr) {
+            console.error("Lỗi khi liên kết tài khoản:", linkErr);
+          }
+        }
+
         setShowCreateUser(false);
-        setCreateForm({ email: '', full_name: '', password: '', role: 'student' });
+        setCreateForm({ email: '', full_name: '', password: '', role: 'student', linkedUserId: '' });
         fetchUsers();
       } else {
         const err = await res.json();
@@ -538,7 +571,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         <p className="text-sm text-on-surface-variant mt-1">Khối {cls.grade_level}</p>
                         <p className="text-xs text-on-surface-variant mt-3 font-medium">GVCN: <span className="text-on-surface font-bold">{cls.homeroom_teacher_id ? users.find(u => u.id === cls.homeroom_teacher_id)?.full_name || 'Chưa phân công' : 'Chưa phân công'}</span></p>
                       </div>
-                      <div className="mt-4 pt-4 border-t border-outline-variant/10 flex justify-end">
+                      <div className="mt-4 pt-4 border-t border-outline-variant/10 flex justify-between items-center">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls.id); }}
+                          className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error/10 rounded transition shrink-0 opacity-0 group-hover:opacity-100"
+                          title="Xóa lớp học"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                         <span className="text-xs font-bold text-primary group-hover:underline">Quản lý lớp &rarr;</span>
                       </div>
                     </div>
@@ -852,11 +892,28 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 >
                   <option value="student">Học sinh</option>
                   <option value="subject_teacher">Giáo viên bộ môn</option>
-                  <option value="homeroom_teacher">Giáo viên chủ nhiệm</option>
+                  {/* <option value="homeroom_teacher">Giáo viên chủ nhiệm</option> */}
                   <option value="parent">Phụ huynh</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
+              {['student', 'parent'].includes(createForm.role) && (
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-1">
+                    Liên kết với {createForm.role === 'student' ? 'Phụ huynh' : 'Học sinh'} (Tùy chọn)
+                  </label>
+                  <select
+                    value={createForm.linkedUserId}
+                    onChange={e => setCreateForm({...createForm, linkedUserId: e.target.value})}
+                    className="w-full bg-surface-container-low p-3 rounded-lg text-sm focus:ring-2 focus:ring-primary border-none"
+                  >
+                    <option value="">-- Không liên kết --</option>
+                    {users.filter(u => getRoleLabel(u.role) === (createForm.role === 'student' ? 'Phụ huynh' : 'Học sinh')).map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name} ({u.email})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="flex gap-3 justify-end pt-2">
               <button onClick={() => setShowCreateUser(false)} className="px-4 py-2 text-sm font-bold text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors">Hủy</button>

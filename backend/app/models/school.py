@@ -53,6 +53,10 @@ class Grade(Base):
     student = relationship("User", foreign_keys=[student_id])
     subject = relationship("Subject")
     teacher = relationship("User", foreign_keys=[teacher_id])
+    
+    @property
+    def subject_name(self):
+        return self.subject.name if self.subject else None
 
 class ClassTeacher(Base):
     __tablename__ = "class_teachers"

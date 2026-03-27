@@ -71,6 +71,11 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
   const [classSubjects, setClassSubjects] = useState<Subject[]>([]); // Môn GV dạy ở lớp hiện tại
   const [announcements, setAnnouncements] = useState<any[]>([]);
 
+  // Grades state
+  const [semester, setSemester] = useState<number>(1);
+  const [grades, setGrades] = useState<any[]>([]);
+  const [gradeInputs, setGradeInputs] = useState<Record<string, string>>({});
+
   // Form states
   const [annTitle, setAnnTitle] = useState("");
   const [annContent, setAnnContent] = useState("");
@@ -147,6 +152,32 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       console.error(e);
     }
   };
+
+  const fetchClassGrades = async (classId: number, subjectId: number, currentSem: number) => {
+    try {
+      const res = await fetch(`${API}/grades/class/${classId}?subject_id=${subjectId}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setGrades(data);
+        const inputs: Record<string, string> = {};
+        data.forEach((g: any) => {
+          if (g.semester === currentSem) {
+            inputs[`${g.student_id}_${g.exam_type}`] = String(g.score);
+          }
+        });
+        setGradeInputs(inputs);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
+    if (selectedClass && uploadSubjectId) {
+      fetchClassGrades(selectedClass.id, uploadSubjectId, semester);
+    } else {
+      setGrades([]);
+      setGradeInputs({});
+    }
+  }, [selectedClass, uploadSubjectId, semester]);
 
   const fetchClassSubjects = async (classId: number) => {
     try {
@@ -246,6 +277,68 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
       console.error(e);
     }
   };
+
+  const handleGradeBlur = async (studentId: number, examType: string, value: string) => {
+    if (!selectedClass || !uploadSubjectId) return;
+    const score = parseFloat(value);
+    if (isNaN(score) || score < 0 || score > 10) {
+      // Revert to old value if invalid
+      const existing = grades.find(g => g.student_id === studentId && g.exam_type === examType && g.semester === semester);
+      setGradeInputs(prev => ({
+        ...prev,
+        [`${studentId}_${examType}`]: existing ? String(existing.score) : ""
+      }));
+      return;
+    }
+
+    const existingGrade = grades.find(g => g.student_id === studentId && g.exam_type === examType && g.semester === semester);
+    
+    // Only update if changed
+    if (existingGrade && existingGrade.score === score) return;
+
+    try {
+      let res;
+      if (existingGrade) {
+        res = await fetch(`${API}/grades/${existingGrade.id}`, {
+          method: "PUT",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ score })
+        });
+      } else {
+        res = await fetch(`${API}/grades/`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            student_id: studentId,
+            subject_id: uploadSubjectId,
+            semester,
+            academic_year: selectedClass.academic_year,
+            exam_type: examType,
+            score
+          })
+        });
+      }
+
+      if (res.ok) {
+        const updatedOrNew = await res.json();
+        setGrades(prev => {
+          if (existingGrade) {
+            return prev.map(g => g.id === existingGrade.id ? updatedOrNew : g);
+          }
+          return [...prev, updatedOrNew];
+        });
+      }
+    } catch (e) {
+      console.error("Lỗi cập nhật điểm:", e);
+    }
+  };
+
+  const examTypes = [
+    { key: "15p", label: "15 Phút" },
+    { key: "1_tiet", label: "1 Tiết" },
+    { key: "giua_ky", label: "Giữa Kỳ" },
+    { key: "cuoi_ky", label: "Cuối Kỳ" }
+  ];
 
   const handleSendAnnouncement = async () => {
     if (!annTitle.trim() || !annContent.trim()) {
@@ -677,6 +770,122 @@ export default function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* GRADES */}
+        {activeTab === "grades" && (
+          <section>
+            <div className="bg-surface-container-lowest rounded-lg p-8 shadow-sm">
+              <h3 className="text-2xl font-bold tracking-tight mb-6">
+                Nhập điểm Bảng tính
+              </h3>
+
+              {/* Class Selector for Grades */}
+              <div className="mb-6">
+                <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant block mb-2">
+                  CHỌN LỚP NHẬP ĐIỂM
+                </label>
+                <div className="flex gap-3 flex-wrap">
+                  {classes.map((cls) => (
+                    <button
+                      key={cls.id}
+                      onClick={() => selectClass(cls)}
+                      className={`px-4 py-2 rounded-md font-bold text-sm transition-colors flex items-center gap-2 ${
+                        selectedClass?.id === cls.id
+                          ? "bg-primary text-white"
+                          : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
+                      }`}
+                    >
+                      {cls.name}
+                      {cls.homeroom_teacher_id === user?.id && (
+                        <span className="text-yellow-400">★</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="px-6 py-4 border border-outline-variant/10 rounded-t-lg bg-surface-container-low flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold text-on-surface mt-1">
+                    Học sinh: {students.length} — Tự động lưu khi nhập
+                  </p>
+                </div>
+                
+                <div className="flex gap-4">
+                  <select
+                    className="bg-surface-container-low border-none rounded-md px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-primary"
+                    value={semester}
+                    onChange={(e) => setSemester(Number(e.target.value))}
+                  >
+                    <option value={1}>Học kỳ 1</option>
+                    <option value={2}>Học kỳ 2</option>
+                  </select>
+
+                  <select
+                    className="bg-surface-container-low border-none rounded-md px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-primary"
+                    value={uploadSubjectId ?? ""}
+                    onChange={(e) => setUploadSubjectId(Number(e.target.value) || null)}
+                  >
+                    <option value="">-- Chọn môn dạy --</option>
+                    {classSubjects.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-surface-container-lowest text-on-surface-variant border-b border-outline-variant/10 text-xs uppercase tracking-wider">
+                      <th className="px-8 py-4 font-semibold">Học sinh</th>
+                      {examTypes.map(et => (
+                        <th key={et.key} className="px-4 py-4 font-semibold text-center">{et.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/5">
+                    {(!selectedClass || !uploadSubjectId) ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-10 text-center text-on-surface-variant text-sm">
+                          Vui lòng chọn Lớp và Môn học để nhập điểm.
+                        </td>
+                      </tr>
+                    ) : students.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-10 text-center text-on-surface-variant text-sm">
+                          Lớp chưa có học sinh.
+                        </td>
+                      </tr>
+                    ) : students.map((s) => (
+                      <tr key={s.student_id} className="hover:bg-surface-bright transition-colors">
+                        <td className="px-8 py-3">
+                          <span className="font-bold text-sm">{s.student.full_name}</span>
+                        </td>
+                        {examTypes.map(et => {
+                          const inputKey = `${s.student_id}_${et.key}`;
+                          return (
+                            <td key={et.key} className="px-4 py-3 text-center">
+                              <input
+                                type="number"
+                                min="0" max="10" step="0.1"
+                                className="w-20 text-center bg-surface-container-low border-none rounded-md p-2 text-sm focus:ring-2 focus:ring-primary font-bold"
+                                value={gradeInputs[inputKey] ?? ""}
+                                onChange={e => setGradeInputs(prev => ({ ...prev, [inputKey]: e.target.value }))}
+                                onBlur={e => handleGradeBlur(s.student_id, et.key, e.target.value)}
+                                placeholder="--"
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </section>

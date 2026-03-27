@@ -21,10 +21,17 @@ import { useAuth } from "../context/AuthContext";
 interface ParentDashboardProps {
   onLogout: () => void;
 }
+const EXAM_TYPE = {
+  "15p": "15 phút",
+  "1_tiet": "1 tiết",
+  "giua_ky": "Giữa kỳ",
+  "cuoi_ky": "Cuối kỳ",
+};
 
 interface GradeRow {
   id: number;
   subject_id: number;
+  subject_name?: string;
   exam_type: string;
   score: number;
   semester: number;
@@ -296,14 +303,12 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
                   Kết quả học tập{" "}
                   {grades.length > 0 && `(${grades.length} bài)`}
                 </h3>
-                <button className="flex items-center gap-1 text-[11px] font-bold text-primary hover:underline">
-                  <Download className="w-3 h-3" /> Tải PDF
-                </button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="bg-slate-50 text-on-surface-variant border-b border-slate-100">
+                      <th className="px-4 py-3 font-semibold">Môn học</th>
                       <th className="px-4 py-3 font-semibold">Loại bài</th>
                       <th className="px-4 py-3 font-semibold text-center">
                         Kỳ
@@ -320,8 +325,11 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
                           key={g.id}
                           className="hover:bg-primary/5 transition-colors"
                         >
+                          <td className="px-4 py-3 font-bold text-primary">
+                            {g.subject_name || `Môn ID: ${g.subject_id}`}
+                          </td>
                           <td className="px-4 py-3 font-semibold capitalize">
-                            {g.exam_type.replace("_", " ")}
+                            {EXAM_TYPE[g.exam_type]}
                           </td>
                           <td className="px-4 py-3 text-center">
                             Kỳ {g.semester} — {g.academic_year}
@@ -336,7 +344,7 @@ export default function ParentDashboard({ onLogout }: ParentDashboardProps) {
                     ) : (
                       <tr>
                         <td
-                          colSpan={3}
+                          colSpan={4}
                           className="px-4 py-8 text-center text-on-surface-variant text-xs"
                         >
                           {studentIds.length === 0

@@ -30,6 +30,7 @@ class GradeOut(BaseModel):
     id: int
     student_id: int
     subject_id: int
+    subject_name: Optional[str] = None
     semester: int
     academic_year: str
     exam_type: str
@@ -53,7 +54,7 @@ def get_student_grades(
     """Lấy danh sách điểm của một học sinh (Giáo viên, Admin, Hoặc chính học sinh đó)."""
     # Simple access control: Allow if admin/teacher, or if user is the student
     role_set = set(current_user.role or [])
-    if "admin" not in role_set and "subject_teacher" not in role_set and "homeroom_teacher" not in role_set:
+    if "admin" not in role_set and "subject_teacher" not in role_set and "homeroom_teacher" not in role_set and "parent" not in role_set:
         if current_user.id != student_id:
             raise HTTPException(status_code=403, detail="Not allowed to view other student's grades")
 
